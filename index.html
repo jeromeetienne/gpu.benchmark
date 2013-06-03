@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<script src='vendor/three.js/build/three.min.js'></script>
+
+<script src="vendor/threex.windowresize/threex.windowresize.js"></script>
+
+<script src='vendor/three.js/examples/js/libs/stats.min.js'></script>
+<script src="vendor/threex.rendererstats/threex.rendererstats.js"></script>
+
+<body style='margin: 0px; background-color: #bbbbbb; overflow: hidden;'>
+<div id='params' style='position: absolute'>
+	<label>
+		<input type="number" min="0" class='nMeshes'></input>
+		nMeshes
+	</label><br>
+	<label>
+		<input type="number" min="0" class='sphereWidthSegments'></input>
+		sphereWidthSegments
+	</label><br>
+	<label>
+		<input type="number" min="0" class='sphereHeightSegments'></input>
+		sphereHeightSegments
+	</label><br>
+	<label>
+		<select class='material'>
+			<option>lambert</option>
+			<option>phong</option>
+			<option>normal</option>
+		</select>
+		material
+	</label><br>
+	<label>
+		<input type="number" min="1" step="1" class='devicePixelRatioInv'></input>
+		devicePixelRatioInv
+	</label><br>
+	<label>
+		<input type="checkbox" class='antialias'></input>
+		antialias
+	</label><br>
+	<label>
+		<input type="checkbox" class='showStats'></input>
+		showStats
+	</label><br>
+	<label>
+		<input type="number" min="0" class='nPointLights'></input>
+		nPointLights
+	</label><br>
+	<label>
+		<input type="number" min="0" class='nDirectionalLights'></input>
+		nDirectionalLights
+	</label><br>
+	<div id='actions'>
+		<input type='button' value='resetDefault'>
+	</div>
+</div>
+<script>
+	var profileDefault	= {
+		nMeshes			: 10,
+		sphereWidthSegments	: 8,
+		sphereHeightSegments	: 6,
+		material		: 'lambert',
+		devicePixelRatioInv	: 1,
+		antialias		: true,
+		showStats		: true,
+		nPointLights		: 1,
+		nDirectionalLights	: 1,
+	}
+
+	//////////////////////////////////////////////////////////////////////////////////
+	//		comment								//
+	//////////////////////////////////////////////////////////////////////////////////
+	// get profile from hash if provided
+	if( location.hash !== '' ){
+		profile	= JSON.parse(decodeURIComponent(location.hash.substring(1)))
+	}else{
+		// set profileDefault
+		profile	= profileDefault
+		// set the location hash
+		location.hash	= '#'+encodeURIComponent(JSON.stringify(profile))
+	}
+	console.log('current profile', JSON.stringify(profile, null, '\t'))
+	// update params elements from 
+	Object.keys(profile).forEach(function(param){
+		var element	= document.querySelector('#params .'+param)
+		if( !element )	return;
+		if( element.type === 'checkbox' ){
+			element.checked	= profile[param]
+		}else{
+			element.value	= profile[param]
+		}
+	})
+	
+	document.querySelector('#actions [value="resetDefault"]').addEventListener('click', function(){
+		profile	= profileDefault
+		// set the location hash
+		location.hash	= '#'+encodeURIComponent(JSON.stringify(profile))		
+		// reload the page
+		location.reload(false)
+	})
+
+	document.querySelector('#params').addEventListener('change', function(){
+		// put <input> values into profile
+		Object.keys(profile).forEach(function(param){
+			var element	= document.querySelector('#params .'+param)
+			if( !element )	return;
+			if( element.type === 'checkbox' ){
+				profile[param]	= element.checked;				
+			}else{
+				profile[param]	= element.value;			
+			}
+		})
+		// update the location hash
+		location.hash	= '#'+encodeURIComponent(JSON.stringify(profile))
+		// reload the page
+		location.reload(false)
+	})
+
+	//////////////////////////////////////////////////////////////////////////////////
+	//		comment								//
+	//////////////////////////////////////////////////////////////////////////////////
+	var renderer	= new THREE.WebGLRenderer({
+		antialias	: profile.antialias
+	});
+	renderer.setSize( window.innerWidth, window.innerHeight );
+	document.body.appendChild( renderer.domElement );
+
+	var updateFcts	= [];
+	var scene	= new THREE.Scene();
+	var camera	= new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.01, 100 );
+	camera.position.z = 10;
+	
+	//////////////////////////////////////////////////////////////////////////////////
+	//		use THREEx.RendererStats					//
+	//////////////////////////////////////////////////////////////////////////////////
+
+	if( profile.showStats ){
+		var rendererStats	= new THREEx.RendererStats()
+		rendererStats.domElement.style.position	= 'absolute'
+		rendererStats.domElement.style.left	= '0px'
+		rendererStats.domElement.style.bottom	= '0px'
+		document.body.appendChild( rendererStats.domElement )
+		updateFcts.push(function(delta, now){
+			rendererStats.update(renderer);
+		})		
+	}
+
+	//////////////////////////////////////////////////////////////////////////////////
+	//		use stats.js							//
+	//////////////////////////////////////////////////////////////////////////////////	
+
+	if( profile.showStats ){
+		var stats	= new Stats();
+		stats.domElement.style.position	= 'absolute'
+		stats.domElement.style.right	= '0px'
+		stats.domElement.style.bottom	= '0px'
+		document.body.appendChild( stats.domElement )
+		updateFcts.push(function(delta, now){
+			stats.update()
+		})
+	}
+
+	//////////////////////////////////////////////////////////////////////////////////
+	//		comment								//
+	//////////////////////////////////////////////////////////////////////////////////
+
+	var winResize	= new THREEx.WindowResize(renderer, camera)
+
+	// honor .devicePixelRatio
+	renderer.devicePixelRatio	= 1/profile.devicePixelRatioInv
+	winResize.trigger()
+	
+	//////////////////////////////////////////////////////////////////////////////////
+	//		comment								//
+	//////////////////////////////////////////////////////////////////////////////////
+
+
+	var lightIntensity	= 1/(profile.nPointLights+profile.nDirectionalLights)
+	lightIntensity	= 1
+	for(var i = 0; i < profile.nPointLights; i++){
+		var object	= new THREE.PointLight( 0xFFFFFF * Math.random() )
+		object.intensity	= lightIntensity
+		object.position.x	= (Math.random()-0.5)*5
+		object.position.y	= (Math.random()-0.5)*5
+		object.position.z	= (Math.random()-0.5)*5		
+		scene.add(object)		
+	}
+
+	for(var i = 0; i < profile.nDirectionalLights; i++){
+		var object	= new THREE.DirectionalLight( 0xFFFFFF * Math.random() )
+		object.intensity	= lightIntensity
+		object.position.x	= (Math.random()-0.5)*5
+		object.position.y	= (Math.random()-0.5)*5
+		object.position.z	= (Math.random()-0.5)*5		
+		scene.add(object)		
+	}
+
+	//////////////////////////////////////////////////////////////////////////////////
+	//		comment								//
+	//////////////////////////////////////////////////////////////////////////////////
+
+	for(var i = 0; i < profile.nMeshes; i++){
+		var geometry	= new THREE.SphereGeometry(0.5, profile.sphereWidthSegments, profile.sphereHeightSegments);
+		if( profile.material === 'phong' ){
+			var material	= new THREE.MeshPhongMaterial()
+		}else if( profile.material === 'lambert' ){
+			var material	= new THREE.MeshLambertMaterial()
+		}else if( profile.material === 'normal' ){
+			var material	= new THREE.MeshNormalMaterial()
+		}else	console.assert(false)
+
+		var object	= new THREE.Mesh(geometry, material)
+		object.position.x	= (Math.random()-0.5)*10
+		object.position.y	= (Math.random()-0.5)*8
+		object.position.z	= (Math.random()-0.5)*10
+		scene.add(object)
+	}
+
+	//////////////////////////////////////////////////////////////////////////////////
+	//		add an object and make it move					//
+	//////////////////////////////////////////////////////////////////////////////////	
+	// var geometry	= new THREE.CubeGeometry( 1, 1, 1);
+	// var material	= new THREE.MeshNormalMaterial();
+	// var mesh	= new THREE.Mesh( geometry, material );
+	// scene.add( mesh );
+	// updateFcts.push(function(delta, now){
+	// 	mesh.rotation.x += 1 * delta;
+	// 	mesh.rotation.y += 0.01;		
+	// })
+	
+	//////////////////////////////////////////////////////////////////////////////////
+	//		Camera Controls							//
+	//////////////////////////////////////////////////////////////////////////////////
+	var mouse	= {x : 0, y : 0}
+	document.addEventListener('mousemove', function(event){
+		mouse.x	= (event.clientX / window.innerWidth ) - 0.5
+		mouse.y	= (event.clientY / window.innerHeight) - 0.5
+	}, false)
+	updateFcts.push(function(delta, now){
+		camera.position.x += (mouse.x*20 - camera.position.x) * 0.05
+		camera.position.y += (mouse.y*20 - camera.position.y) * 0.05
+		camera.lookAt( scene.position )
+	})
+
+	//////////////////////////////////////////////////////////////////////////////////
+	//		render the scene						//
+	//////////////////////////////////////////////////////////////////////////////////
+	updateFcts.push(function(){
+		renderer.render( scene, camera );		
+	})
+	
+	//////////////////////////////////////////////////////////////////////////////////
+	//		loop runner							//
+	//////////////////////////////////////////////////////////////////////////////////
+	var lastTimeMsec= null
+	requestAnimationFrame(function animate(nowMsec){
+		// keep looping
+		requestAnimationFrame( animate );
+		// measure time
+		lastTimeMsec	= lastTimeMsec || nowMsec-1000/60
+		var deltaMsec	= Math.min(200, nowMsec - lastTimeMsec)
+		lastTimeMsec	= nowMsec
+		// call each update function
+		updateFcts.forEach(function(updateFn){
+			updateFn(deltaMsec/1000, nowMsec/1000)
+		})
+	})
+</script></body>
