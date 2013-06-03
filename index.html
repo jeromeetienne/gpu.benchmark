@@ -135,7 +135,7 @@
 		// set profileDefault
 		profile	= profileDefault
 		// set the location hash
-		location.hash	= '#'+encodeURIComponent(JSON.stringify(profile))
+		//location.hash	= '#'+encodeURIComponent(JSON.stringify(profile))
 	}
 	console.log('current profile', JSON.stringify(profile, null, '\t'))
 	// update params elements from 
@@ -150,11 +150,7 @@
 	})
 	
 	document.querySelector('#actions [value="resetDefault"]').addEventListener('click', function(){
-		profile	= profileDefault
-		// set the location hash
-		location.hash	= '#'+encodeURIComponent(JSON.stringify(profile))		
-		// reload the page
-		location.reload(false)
+		location.href	= location.href.replace(/#.*$/, '');		
 	})
 
 	document.querySelector('#params').addEventListener('change', function(){
