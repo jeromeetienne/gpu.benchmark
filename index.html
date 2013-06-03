@@ -7,7 +7,21 @@
 <script src="vendor/threex.rendererstats/threex.rendererstats.js"></script>
 
 <body style='margin: 0px; background-color: #bbbbbb; overflow: hidden;'>
+<div style='position: absolute; top: 0px; text-align:center; width:100%;'>
+	gpu benchmark based on <a href="http://threejs.org" target="_blank">three.js</a>
+</div>
 <div id='params' style='position: absolute'>
+	<label>
+		<select class='loopFunction'>
+			<option>requestAnimationFrame</option>
+			<option>setTimeout</option>
+		</select>
+		loopFunction
+	</label><br>
+	<label>
+		<input type="number" min="1" class='nRender'></input>
+		nRender
+	</label><br>
 	<label>
 		<input type="number" min="0" class='nMeshes'></input>
 		nMeshes
@@ -21,13 +35,24 @@
 		sphereHeightSegments
 	</label><br>
 	<label>
+		<input type="number" min="0" class='sphereRadius'></input>
+		sphereRadius
+	</label><br>
+	<label>
 		<select class='material'>
-			<option>lambert</option>
 			<option>phong</option>
+			<option>lambert</option>
+			<option>basic</option>
 			<option>normal</option>
 		</select>
 		material
 	</label><br>
+	<label>
+		<input type="checkbox" class='verticesNeedUpdate'></input>
+		verticesNeedUpdate
+	</label><br>
+
+	<hr>
 	<label>
 		<input type="number" min="1" step="1" class='devicePixelRatioInv'></input>
 		devicePixelRatioInv
@@ -40,6 +65,28 @@
 		<input type="checkbox" class='showStats'></input>
 		showStats
 	</label><br>
+	<hr>
+	<label>
+		<input type="checkbox" class='useTexture'></input>
+		useTexture
+	</label><br>
+	<label>
+		<input type="checkbox" class='textureNeedsUpdate'></input>
+		textureNeedsUpdate
+	</label><br>
+	<label>
+		<input type="number" min="1" step="1" class='anisotropy'></input>
+		anisotropy
+	</label><br>
+	<label>
+		<input type="number" min="0" class='textureWidth'></input>
+		textureWidth
+	</label><br>
+	<label>
+		<input type="number" min="0" class='textureHeight'></input>
+		textureHeight
+	</label><br>
+	<hr>
 	<label>
 		<input type="number" min="0" class='nPointLights'></input>
 		nPointLights
@@ -54,13 +101,26 @@
 </div>
 <script>
 	var profileDefault	= {
+		nRender			: 1,
+		loopFunction		: 'requestAnimationFrame',
+
 		nMeshes			: 10,
 		sphereWidthSegments	: 8,
 		sphereHeightSegments	: 6,
+		sphereRadius		: 0.5,
 		material		: 'lambert',
+		verticesNeedUpdate	: false,
+
 		devicePixelRatioInv	: 1,
 		antialias		: true,
 		showStats		: true,
+		
+		useTexture		: true,
+		textureWidth		: 1024,
+		textureHeight		: 1024,
+		textureNeedsUpdate	: false,
+		anisotropy		: 1,
+		
 		nPointLights		: 1,
 		nDirectionalLights	: 1,
 	}
@@ -193,25 +253,75 @@
 		scene.add(object)		
 	}
 
+
+	//////////////////////////////////////////////////////////////////////////////////
+	//		build the texture						//
+	//////////////////////////////////////////////////////////////////////////////////
+
+	var canvas	= document.createElement( 'canvas' );
+	canvas.width	= profile.textureWidth
+	canvas.height	= profile.textureHeight
+	var context	= canvas.getContext( '2d' );
+	context.lineWidth = 10;
+	context.fillStyle = 'white'
+	context.fillRect( 0, 0, canvas.width, canvas.height );
+
+	context.beginPath();
+	context.moveTo(0, 0);
+	context.lineTo(canvas.width, canvas.height);
+	context.stroke();
+
+	context.beginPath();
+	context.moveTo(canvas.width, 0);
+	context.lineTo(0, canvas.height);
+	context.stroke();
+	context.strokeStyle = 'black';
+	context.strokeRect( 0, 0, canvas.width, canvas.height );
+
+
+	var texture = new THREE.Texture( canvas );
+	texture.needsUpdate	= true;
+	texture.anisotropy	= profile.anisotropy
+	
+	if( profile.textureNeedsUpdate ){
+		updateFcts.push(function(){
+			texture.needsUpdate	= true;
+		})
+	}
+	
 	//////////////////////////////////////////////////////////////////////////////////
 	//		comment								//
 	//////////////////////////////////////////////////////////////////////////////////
 
+	var objects	= []
 	for(var i = 0; i < profile.nMeshes; i++){
-		var geometry	= new THREE.SphereGeometry(0.5, profile.sphereWidthSegments, profile.sphereHeightSegments);
+		var geometry	= new THREE.SphereGeometry(profile.sphereRadius, profile.sphereWidthSegments, profile.sphereHeightSegments);
 		if( profile.material === 'phong' ){
 			var material	= new THREE.MeshPhongMaterial()
 		}else if( profile.material === 'lambert' ){
 			var material	= new THREE.MeshLambertMaterial()
+		}else if( profile.material === 'basic' ){
+			var material	= new THREE.MeshBasicMaterial()
 		}else if( profile.material === 'normal' ){
 			var material	= new THREE.MeshNormalMaterial()
 		}else	console.assert(false)
+
+		if( profile.useTexture )	material.map	= texture
 
 		var object	= new THREE.Mesh(geometry, material)
 		object.position.x	= (Math.random()-0.5)*10
 		object.position.y	= (Math.random()-0.5)*8
 		object.position.z	= (Math.random()-0.5)*10
 		scene.add(object)
+		objects.push(object)
+	}
+
+	if( profile.verticesNeedUpdate ){
+		updateFcts.push(function(){
+			objects.forEach(function(object){
+				object.geometry.verticesNeedUpdate	= true
+			})
+		})
 	}
 
 	//////////////////////////////////////////////////////////////////////////////////
@@ -244,23 +354,63 @@
 	//		render the scene						//
 	//////////////////////////////////////////////////////////////////////////////////
 	updateFcts.push(function(){
-		renderer.render( scene, camera );		
+		for(var i = 0; i < profile.nRender; i++){
+			renderer.render( scene, camera )		
+		}
+		// not sure how usefull it is
+		//renderer.context.finish();		
 	})
 	
 	//////////////////////////////////////////////////////////////////////////////////
 	//		loop runner							//
 	//////////////////////////////////////////////////////////////////////////////////
-	var lastTimeMsec= null
-	requestAnimationFrame(function animate(nowMsec){
-		// keep looping
-		requestAnimationFrame( animate );
-		// measure time
-		lastTimeMsec	= lastTimeMsec || nowMsec-1000/60
-		var deltaMsec	= Math.min(200, nowMsec - lastTimeMsec)
-		lastTimeMsec	= nowMsec
-		// call each update function
-		updateFcts.forEach(function(updateFn){
-			updateFn(deltaMsec/1000, nowMsec/1000)
-		})
-	})
-</script></body>
+	if( profile.loopFunction === 'requestAnimationFrame' ){
+		var lastTimeMsec= null
+		requestAnimationFrame(function animate(nowMsec){
+			// keep looping
+			requestAnimationFrame( animate );
+			// measure time
+			lastTimeMsec	= lastTimeMsec || nowMsec-1000/60
+			var deltaMsec	= Math.min(200, nowMsec - lastTimeMsec)
+			lastTimeMsec	= nowMsec
+			// call each update function
+			updateFcts.forEach(function(updateFn){
+				updateFn(deltaMsec/1000, nowMsec/1000)
+			})
+		})		
+	}else if( profile.loopFunction === 'setTimeout' ){
+		/**
+		 * precise version of Date.now() -
+		 * It provide submillisecond precision based on window.performance.now() when 
+		 * available, fall back on Date.now()
+		 * see http://updates.html5rocks.com/2012/05/requestAnimationFrame-API-now-with-sub-millisecond-precision 
+		*/
+		var nowSubms	= (function(){
+			var p	= window.performance	|| {};
+			if( p.now )		return function(){ return p.timing.navigationStart + p.now();		};
+			else if( p.mozNow )	return function(){ return p.timing.navigationStart + p.mozNow();	};
+			else if( p.webkitNow )	return function(){ return p.timing.navigationStart + p.webkitNow()	};
+			else if( p.mskitNow )	return function(){ return p.timing.navigationStart + p.msNow()		};
+			else if( p.okitNow )	return function(){ return p.timing.navigationStart + p.oNow()		};
+			else			return function(){ return Date.now();					};	
+		})();
+		var lastTimeMsec= null
+		setTimeout(function animate(nowMsec){
+			nowMsec	= nowSubms();
+			// keep looping
+			setTimeout( animate, 0 );
+			// measure time
+			lastTimeMsec	= lastTimeMsec || nowMsec-1000/60
+			var deltaMsec	= Math.min(200, nowMsec - lastTimeMsec)
+			lastTimeMsec	= nowMsec
+			// call each update function
+			updateFcts.forEach(function(updateFn){
+				updateFn(deltaMsec/1000, nowMsec/1000)
+			})
+		}, 0)
+	}
+	
+</script>
+
+<a href="https://github.com/jeromeetienne/gpu.benchmark" target='_blank'><img style="position: absolute; top: 0; right: 0; border: 0;" src="https://s3.amazonaws.com/github/ribbons/forkme_right_darkblue_121621.png" alt="Fork me on GitHub"></a>
+</body>
